@@ -60,6 +60,16 @@ tbody tr.click:hover{background:var(--soft)}
 .row-between{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap}
 .row-between h2{margin:0}
 svg text{fill:var(--mute);font-size:11px}
+.items{display:flex;flex-direction:column}
+.item{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 4px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.item:last-child{border-bottom:0}
+.item.editing{background:var(--soft);border-radius:8px;padding:10px 8px}
+.it-main{min-width:0;flex:1 1 220px}
+.it-main b{font-variant-numeric:tabular-nums}
+.it-act{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.btn.del{color:var(--desp);border-color:color-mix(in srgb,var(--desp) 40%,var(--line))}
+.btn:disabled{opacity:.45;cursor:default}
+#ftitle.editing{color:var(--acc)}
 @media (max-width:900px){.form{grid-template-columns:repeat(2,1fr)}.form .c2{grid-column:span 2}.kpis{grid-template-columns:repeat(2,1fr)}.kpis2{grid-template-columns:1fr}.grid2{grid-template-columns:1fr}}
 </style></head><body><div id="root"></div><script>
 (function(){
@@ -172,7 +182,7 @@ setTipo('entrada');
 
 function msg(t,c){var m=$('fmsg');m.textContent=t;m.className='msg '+(c||'');if(c==='ok')setTimeout(function(){if(m.textContent===t)m.textContent='';},2500);}
 function resetForm(){
-  ui.editId=null;$('fValor').value='';$('fDesc').value='';$('fCat').value='';
+  var wasEdit=ui.editId;ui.editId=null;$('fValor').value='';$('fDesc').value='';$('fCat').value='';
   $('fBtn').textContent='Lançar';$('fCancel').style.display='none';$('ftitle').textContent='Novo lançamento';
 }
 $('fCancel').addEventListener('click',function(){resetForm();msg('');});
@@ -251,6 +261,20 @@ function render(){
     kpi('Saldo acumulado até '+MESES[m-1].toLowerCase(),'<span class="'+cls(acum.saldo)+'">'+money(acum.saldo)+'</span>','soma de todos os meses até este')+
   '</div>';
 
+
+  // lançamentos (logo abaixo dos totais, com editar/apagar visíveis)
+  var sorted=inMonth.slice().sort(function(a,b){return a.data<b.data?1:a.data>b.data?-1:(a.id<b.id?1:-1);});
+  var items=sorted.map(function(e){
+    var act=ui.confirmDel===e.id
+      ?'<span class="sub" style="color:var(--desp)">Apagar este lançamento?</span><button class="btn danger sm" data-act="del" data-id="'+e.id+'">Sim, apagar</button><button class="btn ghost sm" data-act="nodel">Não</button>'
+      :'<button class="btn ghost sm" data-act="edit" data-id="'+e.id+'">✏️ Editar</button><button class="btn ghost sm del" data-act="askdel" data-id="'+e.id+'">🗑️ Apagar</button>';
+    var extra=[e.cat,e.desc].filter(Boolean).map(esc).join(' · ');
+    return '<div class="item'+(ui.editId===e.id?' editing':'')+'"><div class="it-main"><div><span class="tag '+e.tipo+'">'+(e.tipo==='entrada'?'Entrada':'Despesa')+'</span> <b class="'+(e.tipo==='entrada'?'pos':'neg')+'">'+(e.tipo==='despesa'?'− ':'')+money(e.valor)+'</b> <span class="sub">'+FORMA[e.forma]+' · '+br(e.data)+'</span></div>'+(extra?'<div class="sub">'+extra+'</div>':'')+'</div><div class="it-act">'+act+'</div></div>';
+  }).join('');
+  h+='<section class="card"><div class="row-between"><h2>Lançamentos de '+monthLabel(mk)+' ('+sorted.length+')</h2><button class="btn ghost sm" data-act="csv">Copiar tudo em CSV</button></div>'+
+    (sorted.length?'<div class="items">'+items+'</div>':'<div class="empty">Nenhum lançamento neste mês. Use o formulário acima.</div>')+
+    '<div id="csvmsg" class="msg"></div></section>';
+
   // semanal
   var run=0,wrows=weeks.map(function(w,i){run+=w.r.saldo;return '<tr><td>Sem '+(i+1)+' <span class="sub">('+w.label+')</span></td><td>'+money(w.r.pix)+'</td><td>'+money(w.r.esp)+'</td><td>'+money(w.r.ent)+'</td><td>'+money(w.r.desp)+'</td><td class="'+cls(w.r.saldo)+'">'+money(w.r.saldo)+'</td><td class="'+cls(run)+'">'+money(run)+'</td></tr>';}).join('');
   h+='<div class="grid2"><section class="card"><h2>Resultado semanal — '+monthLabel(mk)+'</h2>'+
@@ -302,29 +326,23 @@ function render(){
   h+='<section class="card" style="margin-top:16px"><h2>Resultado mensal — '+y+' <span class="sub">(clique num mês para abri-lo)</span></h2><div class="scroll"><table><thead><tr><th>Mês</th><th>PIX</th><th>Espécie</th><th>Entradas</th><th>Despesas</th><th>Saldo final</th></tr></thead><tbody>'+mrows+'</tbody>'+
     '<tfoot><tr><td>Total '+y+'</td><td>'+money(yr.pix)+'</td><td>'+money(yr.esp)+'</td><td>'+money(yr.ent)+'</td><td>'+money(yr.desp)+'</td><td class="'+cls(yr.saldo)+'">'+money(yr.saldo)+'</td></tr></tfoot></table></div></section>';
 
-  // lançamentos
-  var sorted=inMonth.slice().sort(function(a,b){return a.data<b.data?1:a.data>b.data?-1:0;});
-  var lrows=sorted.map(function(e){
-    var del=ui.confirmDel===e.id?'<button class="btn danger sm" data-act="del" data-id="'+e.id+'">Confirmar exclusão</button> <button class="btn ghost sm" data-act="nodel">Não</button>':'<button class="btn ghost sm" data-act="edit" data-id="'+e.id+'">Editar</button> <button class="btn ghost sm" data-act="askdel" data-id="'+e.id+'">Excluir</button>';
-    return '<tr><td>'+br(e.data)+'</td><td class="l"><span class="tag '+e.tipo+'">'+(e.tipo==='entrada'?'Entrada':'Despesa')+'</span></td><td class="l">'+FORMA[e.forma]+'</td><td class="l">'+esc(e.cat)+'</td><td class="l">'+esc(e.desc)+'</td><td class="'+(e.tipo==='entrada'?'pos':'neg')+'">'+(e.tipo==='despesa'?'− ':'')+money(e.valor)+'</td><td>'+del+'</td></tr>';
-  }).join('');
-  h+='<section class="card"><div class="row-between"><h2>Lançamentos de '+monthLabel(mk)+'</h2><button class="btn ghost sm" data-act="csv">Copiar tudo em CSV</button></div>'+
-    (sorted.length?'<div class="scroll"><table><thead><tr><th>Data</th><th class="l">Tipo</th><th class="l">Forma</th><th class="l">Origem / categoria</th><th class="l">Descrição</th><th>Valor</th><th></th></tr></thead><tbody>'+lrows+'</tbody></table></div>':'<div class="empty">Nenhum lançamento neste mês. Use o formulário acima.</div>')+
-    '<div id="csvmsg" class="msg"></div></section>';
-
   var ds=daysSince(state.meta.lastBackup);
   h+='<section class="card"><h2>Backup dos dados</h2><div class="sub" style="margin-bottom:10px">Os lançamentos ficam guardados só neste celular. Se o navegador for limpo ou o aparelho trocado, eles se perdem. Guarde um backup de vez em quando (no Drive, e-mail ou WhatsApp).<br>Último backup: <b>'+(state.meta.lastBackup?br(state.meta.lastBackup.slice(0,10))+' ('+(ds===0?'hoje':ds+' dia(s) atrás')+')':'nunca')+'</b></div>'+
     '<div class="actions" style="flex-wrap:wrap"><button class="btn sm" data-act="export">Salvar backup</button><button class="btn ghost sm" data-act="import">Restaurar backup</button><input type="file" id="impFile" accept=".json,application/json" style="display:none"></div>'+
+    '<h2 style="margin-top:18px">Limpar dados</h2><div class="sub" style="margin-bottom:10px">Use para apagar testes. Não tem como desfazer, a não ser restaurando um backup.</div>'+
+    (ui.confirmClear
+      ?'<div class="msg" style="color:var(--desp)">'+(ui.confirmClear==='all'?'Apagar TODOS os '+state.entries.length+' lançamento(s) de todos os meses?':'Apagar os '+inMonth.length+' lançamento(s) de '+monthLabel(mk)+'?')+' <button class="btn danger sm" data-act="clearok">Sim, apagar</button> <button class="btn ghost sm" data-act="clearno">Cancelar</button></div>'
+      :'<div class="actions" style="flex-wrap:wrap"><button class="btn ghost sm del" data-act="clearmonth"'+(inMonth.length?'':' disabled')+'>Apagar lançamentos de '+monthLabel(mk)+'</button><button class="btn ghost sm del" data-act="clearall"'+(state.entries.length?'':' disabled')+'>Apagar todos os lançamentos</button></div>')+
     (ui.pendingImport?'<div class="msg warn" style="color:var(--esp)">O backup tem '+ui.pendingImport.entries.length+' lançamento(s). Restaurar vai SUBSTITUIR os '+state.entries.length+' lançamento(s) atuais. <button class="btn danger sm" data-act="impok">Substituir</button> <button class="btn ghost sm" data-act="impno">Cancelar</button></div>':'')+
     '<div id="bkmsg" class="msg"></div></section>';
 
   $('dash').innerHTML=h;
   var imp=$('impFile');if(imp)imp.addEventListener('change',onImport);
-  $('mSel').addEventListener('change',function(){ui.month=this.value;ui.confirmDel=null;render();});
+  $('mSel').addEventListener('change',function(){ui.month=this.value;ui.confirmDel=null;ui.confirmClear=null;render();});
 }
 function kpi(l,v,hint){return '<div class="kpi"><div class="l">'+l+'</div><div class="v">'+v+'</div><div class="h">'+hint+'</div></div>';}
 function pct(a,b){return b?Math.round(a*100/b)+'%':'0%';}
-function shiftMonth(d){var y=Number(ui.month.slice(0,4)),m=Number(ui.month.slice(5,7))+d;if(m<1){m=12;y--;}if(m>12){m=1;y++;}ui.month=y+'-'+pad(m);ui.confirmDel=null;render();}
+function shiftMonth(d){var y=Number(ui.month.slice(0,4)),m=Number(ui.month.slice(5,7))+d;if(m<1){m=12;y--;}if(m>12){m=1;y++;}ui.month=y+'-'+pad(m);ui.confirmDel=null;ui.confirmClear=null;render();}
 
 $('dash').addEventListener('click',function(ev){
   var tr=ev.target.closest('tr[data-month]');
@@ -340,9 +358,13 @@ $('dash').addEventListener('click',function(ev){
   else if(act==='edit'){
     var e=state.entries.find(function(x){return x.id===id;});if(!e)return;
     ui.editId=id;setTipo(e.tipo);$('fData').value=e.data;$('fForma').value=e.forma;$('fValor').value=centsToInput(e.valor);$('fDesc').value=e.desc||'';$('fCat').value=e.cat||'';
-    $('fBtn').textContent='Salvar alteração';$('fCancel').style.display='';$('ftitle').textContent='Editando lançamento de '+br(e.data);
+    $('fBtn').textContent='Salvar alteração';$('fCancel').style.display='';render();$('ftitle').textContent='Editando lançamento de '+br(e.data);
     window.scrollTo({top:0,behavior:'smooth'});$('fValor').focus();
   }
+  else if(act==='clearmonth'){ui.confirmClear='month';render();}
+  else if(act==='clearall'){ui.confirmClear='all';render();}
+  else if(act==='clearno'){ui.confirmClear=null;render();}
+  else if(act==='clearok'){var mk2=ui.month,n0=state.entries.length;state.entries=ui.confirmClear==='all'?[]:state.entries.filter(function(e){return monthKey(e.data)!==mk2;});var n=n0-state.entries.length;ui.confirmClear=null;resetForm();scheduleSave();fillDatalist();render();bk(n+' lançamento(s) apagado(s).','ok');}
   else if(act==='export'){doExport();}
   else if(act==='import'){$('impFile').click();}
   else if(act==='impok'){state.entries=ui.pendingImport.entries;ui.pendingImport=null;scheduleSave();fillDatalist();render();bk('Backup restaurado.','ok');}
